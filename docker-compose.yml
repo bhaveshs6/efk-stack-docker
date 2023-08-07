@@ -1,19 +1,31 @@
-version: "2.2"
+---
+
+version: "3.8"
+
+volumes:
+  certs:
+    driver: local
+  esdata01:
+    driver: local
+  kibanadata:
+    driver: local
+  filebeatdata:
+    driver: local
+  nginxlogs:
+    driver: local
+
+networks:
+  default:
+    name: elastic
+    external: false
 
 services:
-  nginx:
-    image: nginx:latest
-    ports:
-      - "8081:80"
-    volumes:
-      - ./nginxlogs:/var/log/nginx
-      - ./nginxvolume:/usr/share/nginx/html
-
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
     user: "0"
+    container_name: es-setup
     command: >
       bash -c '
         if [ x${ELASTIC_PASSWORD} == x ]; then
@@ -38,15 +50,9 @@ services:
           "      - localhost\n"\
           "    ip:\n"\
           "      - 127.0.0.1\n"\
-          "  - name: es02\n"\
+          "  - name: kibana\n"\
           "    dns:\n"\
-          "      - es02\n"\
-          "      - localhost\n"\
-          "    ip:\n"\
-          "      - 127.0.0.1\n"\
-          "  - name: es03\n"\
-          "    dns:\n"\
-          "      - es03\n"\
+          "      - kibana\n"\
           "      - localhost\n"\
           "    ip:\n"\
           "      - 127.0.0.1\n"\
@@ -65,22 +71,28 @@ services:
         echo "All done!";
       '
     healthcheck:
-      test: ["CMD-SHELL", "[ -f config/certs/es01/es01.crt ]"]
+      test: [ "CMD-SHELL", "[ -f config/certs/es01/es01.crt ]" ]
       interval: 1s
       timeout: 5s
       retries: 120
 
-  elasticsearch:
+  es01:
+    depends_on:
+      setup:
+        condition: service_healthy
     image: docker.elastic.co/elasticsearch/elasticsearch:${STACK_VERSION}
+    container_name: es01
+    labels:
+      co.elastic.logs/module: elasticsearch
     volumes:
       - certs:/usr/share/elasticsearch/config/certs
-      - esdata:/usr/share/elasticsearch/data
+      - esdata01:/usr/share/elasticsearch/data
     ports:
       - ${ES_PORT}:9200
     environment:
       - node.name=es01
       - cluster.name=${CLUSTER_NAME}
-      - discovery.type=single-node  # Single-node discovery type
+      - discovery.type=single-node
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
       - bootstrap.memory_lock=true
       - xpack.security.enabled=true
@@ -88,14 +100,13 @@ services:
       - xpack.security.http.ssl.key=certs/es01/es01.key
       - xpack.security.http.ssl.certificate=certs/es01/es01.crt
       - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
-      - xpack.security.http.ssl.verification_mode=certificate
       - xpack.security.transport.ssl.enabled=true
       - xpack.security.transport.ssl.key=certs/es01/es01.key
       - xpack.security.transport.ssl.certificate=certs/es01/es01.crt
       - xpack.security.transport.ssl.certificate_authorities=certs/ca/ca.crt
       - xpack.security.transport.ssl.verification_mode=certificate
       - xpack.license.self_generated.type=${LICENSE}
-    mem_limit: ${MEM_LIMIT}
+    mem_limit: ${ES_MEM_LIMIT}
     ulimits:
       memlock:
         soft: -1
@@ -104,33 +115,20 @@ services:
       test:
         [
           "CMD-SHELL",
-          "curl -s --cacert config/certs/ca/ca.crt https://localhost:9200 | grep -q 'missing authentication credentials'",
+          "curl -s --cacert config/certs/ca/ca.crt -u 'elastic:${ELASTIC_PASSWORD}' https://localhost:9200 | grep -q '\"cluster_name\"'"
         ]
       interval: 10s
       timeout: 10s
       retries: 120
 
-  filebeat:
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    image: docker.elastic.co/beats/filebeat:${STACK_VERSION}
-    container_name: filebeat
-    volumes:
-      - ./filebeat.yml:/usr/share/filebeat/filebeat.yml
-      - ./nginxlogs:/var/log/app_logs
-      - certs:/usr/share/elasticsearch/config/certs
-    environment:
-      - ELASTICSEARCH_HOSTS=https://es01:9200
-      - ELASTICSEARCH_USERNAME=elastic
-      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}
-      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
-
   kibana:
     depends_on:
-      elasticsearch:
+      es01:
         condition: service_healthy
     image: docker.elastic.co/kibana/kibana:${STACK_VERSION}
+    container_name: es-kibana
+    labels:
+      co.elastic.logs/module: kibana
     volumes:
       - certs:/usr/share/kibana/config/certs
       - kibanadata:/usr/share/kibana/data
@@ -138,25 +136,68 @@ services:
       - ${KIBANA_PORT}:5601
     environment:
       - SERVERNAME=kibana
-      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=https://es01:9200
       - ELASTICSEARCH_USERNAME=kibana_system
       - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
       - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=config/certs/ca/ca.crt
-    mem_limit: ${MEM_LIMIT}
+      - XPACK_SECURITY_ENCRYPTIONKEY=${ENCRYPTION_KEY}
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=${ENCRYPTION_KEY}
+      - XPACK_REPORTING_ENCRYPTIONKEY=${ENCRYPTION_KEY}
+    mem_limit: ${KB_MEM_LIMIT}
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'",
+          "curl -s -I http://localhost:5601 | grep -q 'HTTP/1.1 302 Found'"
         ]
       interval: 10s
       timeout: 10s
       retries: 120
 
-volumes:
-  certs:
-    driver: local
-  esdata:
-    driver: local
-  kibanadata:
-    driver: local
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "8081:80"
+    volumes:
+      - nginxlogs:/var/log/nginx
+      - ./html/:/usr/share/nginx/html/
+    command: sh -c "chmod o+x /usr/share/nginx/html && nginx -g 'daemon off;'"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:80" ]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+
+  filebeat01:
+    depends_on:
+      es01:
+        condition: service_healthy
+    image: docker.elastic.co/beats/filebeat:${STACK_VERSION}
+    container_name: filebeat
+    user: root
+    volumes:
+      - certs:/usr/share/filebeat/certs
+      - filebeatdata:/usr/share/filebeat/data
+      - "nginxlogs:/usr/share/filebeat/nginxlogs:ro"
+      - "./filebeat.yml:/usr/share/filebeat/filebeat.yml:ro"
+      - "/var/lib/docker/containers:/var/lib/docker/containers:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    environment:
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - ELASTIC_HOSTS=https://es01:9200
+      - KIBANA_HOSTS=http://kibana:5601
+      - STACK_VERSION=${STACK_VERSION}
+      - "setup.ilm.enabled=true"
+      - "setup.ilm.rollover_alias=my_logs_index"
+      - "setup.ilm.policy_name=my_policy"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s --cacert config/certs/ca/ca.crt -u elastic:${ELASTIC_PASSWORD} -k https://es01:9200/_cat/health | grep -q green"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
