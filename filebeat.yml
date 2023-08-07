@@ -1,0 +1,45 @@
+---
+
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+   - /usr/share/filebeat/data/access.log
+   - /usr/share/filebeat/data/error.log
+   
+setup.template:
+  name: "filebeat"
+  pattern: "*filebeat-*"
+  enabled: true
+  index.number_of_shards: 1
+  index.number_of_replicas: 0
+
+
+filebeat.autodiscover:
+ providers:
+   - type: docker
+     hints.enabled: true
+
+
+processors:
+- add_docker_metadata: ~
+
+
+setup.kibana:
+ host: ${KIBANA_HOSTS}
+ username: ${ELASTIC_USER}
+ password: ${ELASTIC_PASSWORD}
+
+
+output.elasticsearch:
+ hosts: ${ELASTIC_HOSTS}
+ username: ${ELASTIC_USER}
+ password: ${ELASTIC_PASSWORD}
+ ssl.enabled: true
+ ssl.certificate_authorities: "certs/ca/ca.crt"
+ index: filebeat-${STACK_VERSION}
+ indices:
+    - index: "filebeat-${STACK_VERSION}"
+      settings:
+        index.number_of_replicas: 0
+        index.hidden: false
