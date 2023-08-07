@@ -12,8 +12,8 @@ This repository contains a Docker Compose configuration for setting up a scalabl
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/elasticsearch-kibana-filebeat-docker-cluster.git
-cd elasticsearch-kibana-filebeat-docker-cluster
+git clone https://github.com/bhaveshs6/efk-stack-docker.git
+cd efk-stack-docker
 ```
 
 2. Customize the .env file:
