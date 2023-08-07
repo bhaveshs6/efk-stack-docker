@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sample Webpage with Routes</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.16/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <header class="bg-gray-900 text-white py-4 text-center">
+        <h1 class="text-2xl font-bold">Sample Webpage to test NGINX</h1>
+    </header>
+    <nav class="bg-gray-800 text-white py-2 text-center">
+        <a href="#" onclick="showSection('home')" class="mx-2 hover:text-gray-300">Home</a>
+        <a href="#" onclick="showSection('about')" class="mx-2 hover:text-gray-300">About</a>
+        <a href="#" onclick="showSection('contact')" class="mx-2 hover:text-gray-300">Contact</a>
+    </nav>
+    <section id="home" class="p-4">
+        <h2 class="text-2xl font-bold">Welcome to the Home Page</h2>
+        <p class="my-4">This is the Home page content...</p>
+        <p class="text-gray-600">Lorem ipsum dolor sit amet consectetur adipisicing elit. Accusantium odit eligendi, cupiditate quas minima doloremque explicabo officiis neque? Fugit ea totam molestias doloremque maxime illo iure unde nesciunt, architecto modi.</p>
+    </section>
+    <section id="about" class="p-4 hidden">
+        <h2 class="text-2xl font-bold">About Us</h2>
+        <p class="my-4">This is the About page content...</p>
+        <p class="text-gray-600">Lorem ipsum dolor, sit amet consectetur adipisicing elit. Sint alias soluta atque ab odio reiciendis nulla quaerat tempora pariatur. Dolores alias rerum, perspiciatis impedit expedita facilis minima consequatur maxime non.</p>
+    </section>
+    <section id="contact" class="p-4 hidden">
+        <h2 class="text-2xl font-bold">Contact Us</h2>
+        <p class="my-4">This is the Contact page content...</p>
+        <p class="text-gray-600">Lorem ipsum dolor, sit amet consectetur adipisicing elit. Quod quisquam vitae autem alias magni dolor sed natus ea cupiditate officiis accusantium rerum, necessitatibus ducimus iste fugit vero quidem tempore quia.</p>
+    </section>
+
+    <script>
+        function showSection(sectionId) {
+            var sections = document.getElementsByTagName('section');
+            for (var i = 0; i < sections.length; i++) {
+                if (sections[i].id === sectionId) {
+                    sections[i].classList.remove('hidden');
+                } else {
+                    sections[i].classList.add('hidden');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
